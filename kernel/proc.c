@@ -170,6 +170,9 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->trace = -1;
+  p->interval = -1;
+  p->sighandler = -1;
+  p->sigflag = 0;
 }
 
 // Create a user page table for a given process, with no user memory,

@@ -77,8 +77,21 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if (p->sigflag == 0 && p->interval > 0)
+    {
+      (p->time) += 1;   // increment CPU time
+      if (p->time >= p->interval) // if CPU time is >= given interval
+      {
+        p->backup = kalloc();
+        *(p->backup) = *(p->trapframe);   // do not use memmove here, causes i!=j error
+        p->time = 0;
+        p->trapframe->epc = p->sighandler;  // changes PC location to sighandler
+        p->sigflag = 1;                   // prevents extra calls
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }

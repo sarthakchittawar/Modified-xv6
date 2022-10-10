@@ -106,3 +106,38 @@ sys_trace(void)
   return 0;
   
 }
+
+// sigalarm
+uint64
+sys_sigalarm(void)
+{
+  struct proc *np = myproc();
+
+  int interval;
+  uint64 func;
+  argint(0, &interval);
+  argaddr(1, &func);
+
+  np->interval = interval;
+  np->sighandler = func;    // sets sighandler to given function call
+  np->time = 0;
+
+  return 1;
+}
+
+// sigreturn
+uint64
+sys_sigreturn(void)
+{
+  struct proc *np = myproc();
+  struct trapframe *mp = np->backup;
+  *(np->trapframe) = *(mp);
+  
+  np->time = 0;
+  np->sigflag = 0;  // set values to default
+
+  kfree(mp);
+
+  usertrapret();    // return to user space, to not modify a0 register unnecessarily
+  return 1;
+}
