@@ -18,6 +18,8 @@ struct context {
   uint64 s11;
 };
 
+enum scheduling_policy { C_DEFAULT, C_FCFS, C_LBS, C_PBS, C_MLFQ };
+
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
@@ -112,4 +114,10 @@ struct proc {
   uint64 interval;             // First parameter of sigalarm syscall, specifies interval time
   uint64 sighandler;           // sighandler goes into this func at every interval
   int sigflag;                 // If sigflag is 1, it means that sighandler is being processed/called
+
+  int call_time;               // Stores the time when this process was called
+  
+  uint rtime;                   // How long the process ran for
+  uint ctime;                   // When was the process created 
+  uint etime;                   // When did the process exited
 };
