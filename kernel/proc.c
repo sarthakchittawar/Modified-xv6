@@ -153,6 +153,7 @@ found:
   p->rtime = 0;
   p->etime = 0;
   p->ctime = ticks;
+  p->tickets = 1;
 
   return p;
 }
@@ -182,6 +183,7 @@ freeproc(struct proc *p)
   p->sighandler = -1;
   p->sigflag = 0;
   p->call_time = 0;
+  p->tickets = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -532,6 +534,9 @@ scheduler(void)
   #ifdef FCFS
   var = 1;
   #endif
+  #ifdef LBS
+  var = 2;
+  #endif
     
   c->proc = 0;
   for(;;){
@@ -591,6 +596,49 @@ scheduler(void)
           c->proc = 0;
         }
         release(&fcfsproc->lock);
+      }
+    }
+    else if (var == 2)
+    {
+      int total = 0;
+      for(p = proc; p<&proc[NPROC]; p++)
+      {
+        acquire(&p->lock);
+        if (p->state == RUNNABLE)
+        {
+          total += p->tickets;
+        }
+        release(&p->lock);
+      }
+      // int t = randgen() % total;
+
+      /* Start of rand */
+      uint64 time = sys_uptime();               // Make random generator in new randgen.c file in kernel
+      uint64 x = time * 0x362451443;
+      int t = x % total;
+      /* End of rand */
+
+      int curr = 0;
+      for(p = proc; p<&proc[NPROC]; p++)
+      {
+        acquire(&p->lock);
+        if (p->state == RUNNABLE)
+        {
+          curr += p->tickets;
+          if (t < curr)
+          {
+            p->state = RUNNING;
+            c->proc = p;
+            swtch(&c->context, &p->context);
+
+            // Process is done running for now.
+            // It should have changed its p->state before coming back.
+            c->proc = 0;
+            release(&p->lock);
+            break;
+          }
+        }
+        release(&p->lock);
       }
     }
   }

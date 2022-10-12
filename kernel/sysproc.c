@@ -158,3 +158,16 @@ sys_sigreturn(void)
   usertrapret();    // return to user space, to not modify a0 register unnecessarily
   return 1;
 }
+
+// settickets
+uint64
+sys_settickets(void)
+{
+  int num;
+  argint(0, &num);
+
+  struct proc *p = myproc();
+  p->tickets = num;
+
+  return num;
+}
