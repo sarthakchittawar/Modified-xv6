@@ -122,4 +122,12 @@ struct proc {
   uint etime;                   // When did the process exited
 
   int tickets;                 // Stores value of tickets assigned to a process
+
+  int static_priority;         // Value of a process's static priority when PBS is done
+  int dynamic_priority;        // Value of a process's dynamic priority when PBS is done
+  int sched_count;             // Counts the number of times process has been scheduled
+  int niceness;                // Stores the niceness value of the process
+
+  uint64 runticks;             // Counts CPU time while running since process was last scheduled
+  uint64 sleepticks;           // Counts CPU time while sleeping since process was last scheduled        
 };

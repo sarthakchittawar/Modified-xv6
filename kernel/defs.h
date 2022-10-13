@@ -195,3 +195,4 @@ uint64          sys_trace(void);
 uint64          sys_sigalarm(void);
 uint64          sys_sigreturn(void);
 uint64          sys_settickets(void);
+uint64          sys_setpriority(void);

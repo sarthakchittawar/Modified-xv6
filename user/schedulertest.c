@@ -13,6 +13,9 @@ int main()
   int twtime = 0, trtime = 0;
   for (n = 0; n < NFORK; n++)
   {
+    for(int i=0; i<100000000; i++)
+    {
+    }
     pid = fork();
     if (pid < 0)
       break;
@@ -26,6 +29,12 @@ int main()
       else
       {
 #endif
+        #ifdef LBS
+        
+          printf("%d\n", settickets(2*n + 10));
+          // settickets(2*n + 10);
+        
+        #endif  
         for (volatile int i = 0; i < 1000000000; i++)
         {
         } // CPU bound process
@@ -38,11 +47,7 @@ int main()
     else
     {
 #ifdef PBS
-      set_priority(60 - IO + n, pid); // Will only matter for PBS, set lower priority for IO bound processes
-#endif
-#ifdef LBS
-    if (n%2==0)
-      settickets(10);
+  set_priority(60 - IO - n, pid); // Will only matter for PBS, set lower priority for IO bound processes
 #endif
     }
   }

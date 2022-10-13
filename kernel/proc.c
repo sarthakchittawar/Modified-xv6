@@ -154,6 +154,13 @@ found:
   p->etime = 0;
   p->ctime = ticks;
   p->tickets = 1;
+  p->static_priority = 60;
+  p->dynamic_priority = 60;
+  p->sched_count = 0;
+  p->niceness = 5;
+
+  p->runticks = 0;
+  p->sleepticks = 0;
 
   return p;
 }
@@ -184,6 +191,12 @@ freeproc(struct proc *p)
   p->sigflag = 0;
   p->call_time = 0;
   p->tickets = 0;
+  p->static_priority = 0;
+  p->dynamic_priority = 0;
+  p->sched_count = 0;
+  p->niceness = 0;
+  p->runticks = 0;
+  p->sleepticks = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -537,6 +550,9 @@ scheduler(void)
   #ifdef LBS
   var = 2;
   #endif
+  #ifdef PBS
+  var = 3;
+  #endif
     
   c->proc = 0;
   for(;;){
@@ -613,7 +629,7 @@ scheduler(void)
       // int t = randgen() % total;
 
       /* Start of rand */
-      uint64 time = sys_uptime();               // Make random generator in new randgen.c file in kernel
+      uint64 time = ticks;               // Make random generator in new randgen.c file in kernel
       uint64 x = time * 0x362451443;
       int t = x % total;
       /* End of rand */
@@ -634,6 +650,7 @@ scheduler(void)
             // Process is done running for now.
             // It should have changed its p->state before coming back.
             c->proc = 0;
+            p->sched_count++;
             release(&p->lock);
             break;
           }
@@ -641,6 +658,123 @@ scheduler(void)
         release(&p->lock);
       }
     }
+
+    else if (var == 3)
+    {
+      uint beg, end;
+      beg = ticks;
+      struct proc *pties[NPROC];
+      struct proc *firstproc = 0;
+      int pcount = 0;
+      int min = __INT_MAX__;
+      for(p = proc; p<&proc[NPROC]; p++)
+      {
+        acquire(&p->lock);
+        if (p->state == RUNNABLE)
+        {          
+          if (p->dynamic_priority < min)
+          {
+            min = p->dynamic_priority; // min priority value
+          }
+        }
+        release(&p->lock);
+      }
+
+      for(p = proc; p<&proc[NPROC]; p++)
+      {
+        acquire(&p->lock);
+        if (p->state == RUNNABLE)
+        {
+          if (p->dynamic_priority == min)
+          {
+            pties[pcount] = p;
+            firstproc = p;
+            pcount++;
+          }
+        }
+        release(&p->lock);
+      }
+
+      if (pcount > 1)
+      {
+        // first tie breaker
+        int min_schedcount = __INT_MAX__;
+        int tiecount = 0;
+        struct proc *pties2[NPROC];
+
+        for(int i=0; i<pcount; i++)
+        {
+          p = pties[i];
+          acquire(&p->lock);
+          if (p->state == RUNNABLE && p->sched_count < min_schedcount)
+          {
+            min_schedcount = p->sched_count;
+          }
+          release(&p->lock);
+        }
+        for(int i=0; i<pcount; i++)
+        {
+          p = pties[i];
+          acquire(&p->lock);
+          if (p->state == RUNNABLE && p->sched_count == min_schedcount)
+          {
+            firstproc = p;
+            pties2[tiecount] = p;
+            tiecount++;
+          }
+          release(&p->lock);
+        }
+        if (tiecount > 1)
+        {
+          int mintime = __INT_MAX__;
+          for(int i=0; i<tiecount; i++)
+          {
+            p = pties2[i];
+            acquire(&p->lock);
+            if (p->state == RUNNABLE && p->call_time < mintime)
+            {
+              firstproc = p;
+              mintime = p->call_time;
+            }
+            release(&p->lock);
+          }
+        }
+      }
+      if (firstproc != 0)
+      {
+        acquire(&firstproc->lock);
+        if (firstproc->state == RUNNABLE)
+        {
+          firstproc->state = RUNNING;
+          c->proc = firstproc;
+          swtch(&c->context, &firstproc->context);
+          c->proc = 0;
+
+          // calc niceness and DP
+          int nic = firstproc->sleepticks;
+          int run = firstproc->runticks;
+
+          nic /= (nic+run);
+          nic *= 10;
+          firstproc->niceness = nic;
+
+          int dmin = firstproc->static_priority - firstproc->niceness + 5;
+          if (dmin > 100)
+            dmin = 100;
+          int DP = dmin;
+          if (DP < 0)
+            DP = 0;
+          
+          firstproc->dynamic_priority = DP;
+          end = ticks;
+          firstproc->runticks = end - beg;
+          firstproc->sched_count++;
+        }
+
+        release(&firstproc->lock);
+      }
+    }
+    
   }
 }
 
@@ -723,6 +857,7 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  p->sleepticks = ticks;
 
   sched();
 
@@ -746,6 +881,8 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        uint64 temp = p->sleepticks;
+        p->sleepticks = ticks - temp;
       }
       release(&p->lock);
     }
@@ -850,7 +987,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    printf("%d %s %s", p->pid, state, p->name);
+    printf("%d %s %d %d %d %d", p->pid, state, p->dynamic_priority, p->sched_count, p->call_time, p->tickets);
     printf("\n");
   }
 }

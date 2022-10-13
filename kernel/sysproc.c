@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 
+extern struct proc proc[NPROC];
+
 uint64
 sys_exit(void)
 {
@@ -115,13 +117,15 @@ sys_trace(void)
   int temp;
   argint(0, &temp);
 
+  acquire(&mp->lock);
   if (mp->trace < 0)
   {
     return -1;
   }
   mp->trace = temp;
+  release(&mp->lock);
+
   return 0;
-  
 }
 
 // sigalarm
@@ -134,10 +138,13 @@ sys_sigalarm(void)
   uint64 func;
   argint(0, &interval);
   argaddr(1, &func);
+  acquire(&np->lock);
 
   np->interval = interval;
   np->sighandler = func;    // sets sighandler to given function call
   np->time = 0;
+
+  release(&np->lock);
 
   return 1;
 }
@@ -147,12 +154,14 @@ uint64
 sys_sigreturn(void)
 {
   struct proc *np = myproc();
+  acquire(&np->lock);
   struct trapframe *mp = np->backup;
   *(np->trapframe) = *(mp);
   
   np->time = 0;
   np->sigflag = 0;  // set values to default
 
+  release(&np->lock);
   kfree(mp);
 
   usertrapret();    // return to user space, to not modify a0 register unnecessarily
@@ -167,7 +176,37 @@ sys_settickets(void)
   argint(0, &num);
 
   struct proc *p = myproc();
+  acquire(&p->lock);
   p->tickets = num;
+  release(&p->lock);
 
   return num;
+}
+
+// set_priority
+uint64
+sys_set_priority(void)
+{
+  int old = -1;
+  int new, pid;
+  argint(0, &new);
+  argint(1, &pid);
+
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->pid == pid)
+    {
+      old = p->static_priority;
+      p->static_priority = new;
+      p->niceness = 5;
+      p->dynamic_priority = new;
+      release(&p->lock);
+      break;
+    }
+    release(&p->lock);
+  }
+
+  return old;
 }
