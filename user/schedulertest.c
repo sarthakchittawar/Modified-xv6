@@ -31,8 +31,8 @@ int main()
 #endif
         #ifdef LBS
         
-          printf("%d\n", settickets(2*n + 10));
-          // settickets(2*n + 10);
+          // printf("%d\n", settickets(2*n + 10));
+          settickets(2*n + 10);
         
         #endif  
         for (volatile int i = 0; i < 1000000000; i++)
