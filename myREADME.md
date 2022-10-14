@@ -1,6 +1,7 @@
 How to run xv6:
     `make qemu` CPUS=x SCHEDULER=y
     here x>=1 & y can be either DEFAULT/FCFS/LBS/PBS/MLFQ
+    Run `make clean` before the above command whenever we need to change SCHEDULER
 
 Specification 1 (System Calls):
 
