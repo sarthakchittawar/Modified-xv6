@@ -132,5 +132,6 @@ struct proc {
   uint64 sleepticks;           // Counts CPU time while sleeping since process was last scheduled   
 
   struct queue *queue;         // For MLFQ, specifies the queue in which process is in   
+  int queued;
   int timeslice;               // Time spent in current queue
 };
