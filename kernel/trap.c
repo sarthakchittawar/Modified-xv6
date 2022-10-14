@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "defs.h"
 
+extern struct queue *queues[5];
+
 struct spinlock tickslock;
 uint ticks;
 

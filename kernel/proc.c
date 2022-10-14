@@ -5,6 +5,36 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "queue.h"
+
+struct queue *queues[5];
+struct queue *q0 = 0;
+struct queue *q1 = 0;
+struct queue *q2 = 0;
+struct queue *q3 = 0;
+struct queue *q4 = 0;
+
+extern uint64 sys_uptime(void);
+
+struct cpu cpus[NCPU];
+
+struct proc proc[NPROC];
+
+struct proc *initproc;
+
+int nextpid = 1;
+struct spinlock pid_lock;
+
+extern void forkret(void);
+static void freeproc(struct proc *p);
+
+extern char trampoline[]; // trampoline.S
+
+// helps ensure that wakeups of wait()ing
+// parents are not lost. helps obey the
+// memory model when using p->parent.
+// must be acquired before any p->lock.
+struct spinlock wait_lock;
 
 // from FreeBSD.
 int
@@ -40,28 +70,6 @@ rand(void)
 {
     return (do_rand(&rand_next));
 }
-
-extern uint64 sys_uptime(void);
-
-struct cpu cpus[NCPU];
-
-struct proc proc[NPROC];
-
-struct proc *initproc;
-
-int nextpid = 1;
-struct spinlock pid_lock;
-
-extern void forkret(void);
-static void freeproc(struct proc *p);
-
-extern char trampoline[]; // trampoline.S
-
-// helps ensure that wakeups of wait()ing
-// parents are not lost. helps obey the
-// memory model when using p->parent.
-// must be acquired before any p->lock.
-struct spinlock wait_lock;
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -196,6 +204,26 @@ found:
 
   p->runticks = 0;
   p->sleepticks = 0;
+  p->timeslice = 0;
+  // acquire(&q0->lock); i want to acquire q0
+  if (q0==0)
+  {
+    // printf("allocproc\n");
+    q0 = (struct queue *)kalloc();
+    q0->array[0] = p;
+    q0->head = 0;
+    q0->tail = 1;
+    q0->maxticks = 1;
+  }
+  else
+  {
+    q0->array[q0->tail] = p;
+    q0->tail++;
+    // printf("%d %d\n", q0, q0->tail);
+  }
+  // release(&q0->lock);
+  p->queue = q0;
+  // printf("%d\n", p->queue->tail);
 
   return p;
 }
@@ -232,6 +260,28 @@ freeproc(struct proc *p)
   p->niceness = 0;
   p->runticks = 0;
   p->sleepticks = 0;
+  // struct queue *q = p->queue;
+  // int index = -1;
+  // if (q!=0)
+  // {
+  //   for(int i=q->head; i< q->tail; i++)
+  //   {
+  //     if (q->array[i] == p)
+  //     {
+  //       index = i;
+  //       break;
+  //     }
+  //   }
+  //   if (index != -1)
+  //   {
+  //     for(int i= index +1 ; i< q->tail; i++)
+  //     {
+  //       q->array[i-1] = q->array[i];
+  //     }
+  //     q->tail = index;
+  //   }
+  //   p->queue = 0;
+  // }
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -511,6 +561,38 @@ update_time()
     acquire(&p->lock);
     if (p->state == RUNNING) {
       p->rtime++;
+      p->timeslice++;
+      if (p->queue != 0 && p->queue != q4)
+      {
+        if (p->timeslice >= p->queue->maxticks)
+        {
+          int index = -1;
+          for(int i=0; i<4; i++)
+          {
+            if (queues[i] == p->queue)
+            {
+              index = i;
+              break;
+            }
+          }
+          p->queue = queues[index + 1];
+          struct queue *q = p->queue;
+          if (q==0)
+          {
+            q = (struct queue *)kalloc();
+            q->array[0] = p;
+            q->head = 0;
+            q->tail = 1;
+            q->maxticks = 1;
+          }
+          else
+          {
+            q->array[q->tail] = p;
+            q->tail++;
+          }
+          p->timeslice = 0;
+        }
+      }
     }
     release(&p->lock); 
   }
@@ -588,6 +670,71 @@ scheduler(void)
   #ifdef PBS
   var = 3;
   #endif
+  #ifdef MLFQ
+  var = 4;
+  #endif
+
+  if (q0==0)
+  {
+    q0 = (struct queue *)kalloc();
+    q0->head = 0;
+    q0->tail = 0;
+    q0->maxticks = 1;
+  }
+  if (q1!=0)
+  {
+    q1->head = 0;
+    q1->tail = 0;
+  }
+  else
+  {
+    q1 = (struct queue *)kalloc();
+    q1->head = 0;
+    q1->tail = 0;
+    q1->maxticks = 2;
+  }
+  if (q2!=0)
+  {
+    q2->head = 0;
+    q2->tail = 0;
+  }
+  else
+  {
+    q2 = (struct queue *)kalloc();
+    q2->head = 0;
+    q2->tail = 0;
+    q2->maxticks = 4;
+  }
+  if (q3!=0)
+  {
+    q3->head = 0;
+    q3->tail = 0;
+  }
+  else
+  {
+    q3 = (struct queue *)kalloc();
+    q3->head = 0;
+    q3->tail = 0;
+    q3->maxticks = 8;
+  }
+  if (q4!=0)
+  {
+    q4->head = 0;
+    q4->tail = 0;
+  }
+  else
+  {
+    q4 = (struct queue *)kalloc();
+    q4->head = 0;
+    q4->tail = 0;
+    q4->maxticks = 16;
+  }
+  
+  queues[0] = q0;
+  queues[1] = q1;
+  queues[2] = q2;
+  queues[3] = q3;
+  queues[4] = q4;
     
   c->proc = 0;
   for(;;){
@@ -662,12 +809,6 @@ scheduler(void)
         release(&p->lock);
       }
       int t = rand() % total;
-
-      /* Start of rand */
-      // uint64 time = ticks;               // Make random generator in new randgen.c file in kernel
-      // uint64 x = time * 0x362451443;
-      // int t = x % total;
-      /* End of rand */
 
       int curr = 0;
       for(p = proc; p<&proc[NPROC]; p++)
@@ -807,6 +948,78 @@ scheduler(void)
         }
 
         release(&firstproc->lock);
+      }
+    }
+    else if (var == 4)
+    {
+      struct proc *firstproc = 0;
+      int flag = 0;
+
+      for(int i=0; i<4; i++)
+      {
+        struct queue *q = queues[i];
+
+        if (q!=0 && q->head == q->tail)
+          continue;
+        if (q!=0)
+        {
+          // printf("here\n");
+          for(int j = q->head; j < q->tail; j++)
+          {
+            if (q->array[j] != 0)
+            {
+              acquire(&(q->array[j]->lock));
+              if (q!=0 && q->array[j]->state == RUNNABLE)
+              {
+                firstproc = q->array[j];
+                flag = 1;
+                release(&(q->array[j]->lock));
+                break;
+              }
+              release(&(q->array[j]->lock));
+            }
+          }
+          if (flag == 1)
+          {
+            break;
+          }
+        }
+      }
+      if (flag == 0)
+      {
+        for(int i=q4->head; i < q4->tail; i++)
+        {
+          firstproc = q4->array[i];
+          if (firstproc)
+          {
+            acquire(&firstproc->lock);
+            if (firstproc->state == RUNNABLE)
+            {
+              firstproc->state = RUNNING;
+              c->proc = firstproc;
+              swtch(&c->context, &firstproc->context);
+              c->proc = 0;
+            }
+            release(&firstproc->lock);
+          }
+        }
+      }
+      else
+      {
+        // printf("here\n");
+        if (firstproc)
+        {
+          // printf("here\n");
+          acquire(&firstproc->lock);
+          if (firstproc->state == RUNNABLE)
+          {
+            firstproc->state = RUNNING;
+            c->proc = firstproc;
+            swtch(&c->context, &firstproc->context);
+            c->proc = 0;
+          }
+          release(&firstproc->lock);
+        }
       }
     }
     
@@ -1022,7 +1235,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    printf("%d %s %d %d %d %d", p->pid, state, p->dynamic_priority, p->sched_count, p->call_time, p->tickets);
+    printf("%d %s %d %d %d %d %d %d", p->pid, state, p->dynamic_priority, p->sched_count, p->call_time, p->tickets, p->timeslice, p->queue->maxticks);
     printf("\n");
   }
 }

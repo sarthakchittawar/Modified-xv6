@@ -129,5 +129,8 @@ struct proc {
   int niceness;                // Stores the niceness value of the process
 
   uint64 runticks;             // Counts CPU time while running since process was last scheduled
-  uint64 sleepticks;           // Counts CPU time while sleeping since process was last scheduled        
+  uint64 sleepticks;           // Counts CPU time while sleeping since process was last scheduled   
+
+  struct queue *queue;         // For MLFQ, specifies the queue in which process is in   
+  int timeslice;               // Time spent in current queue
 };
