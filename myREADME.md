@@ -1,8 +1,16 @@
+How to run xv6:
+    `make qemu` CPUS=x SCHEDULER=y
+    here x>=1 & y can be either DEFAULT/FCFS/LBS/PBS/MLFQ
+
 Specification 1 (System Calls):
 
 trace:
     Firstly we are asked to reference the syscall as 1 << n, so in syscall.c we right shift the same value wrt num.
     If this value is not 0, it would mean that we include this in the tracing of the given ID number and print out certain details like pid, name, params, return value of the syscall process using its struct proc* and struct trapframe (registers)
+
+    We need to add an entry in usys.pl to make the syscall recognizable. Also, we modify the arrays in syscall.c and assign a macro in syscall.h
+    defs.h contains int trace(), and a file called strace.c is made in the user folder. 
+    When this file is called on xv6, it executes the trace syscall and also exec.
 
 sigalarm + sigreturn:
     We initialise a variable pointer p->time and p->interval in struct proc.
